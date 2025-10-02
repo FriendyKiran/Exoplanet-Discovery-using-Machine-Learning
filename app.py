@@ -19,10 +19,36 @@ def load_models():
 
 all_models = load_models()
 
+# === Load Scalers & Test Samples ===
+@st.cache_resource
+def load_support_files():
+    try:
+        scalers = joblib.load("scalers.pkl")
+    except FileNotFoundError:
+        st.error("❌ scalers.pkl not found!")
+        scalers = {}
+
+    try:
+        test_samples = joblib.load("test_sample.pkl")
+    except FileNotFoundError:
+        st.error("❌ test_sample.pkl not found!")
+        test_samples = {}
+
+    return scalers, test_samples
+
+scalers, test_samples = load_support_files()
+
+# Label Encoding & Decoding
+label_encoding = {
+    "Confirmed": 1,
+    "Candidate": 0,
+    "False Positive": 2
+}
+decode_labels = {v: k for k, v in label_encoding.items()}
+
 # --- Helper Functions ---
 def parse_param_string(param_str):
-    """Convert 'key=value, key2=value2' into dict safely."""
-    parts = re.split(',\\s*(?![^()]*\\))', param_str)  # handles tuples like (50,)
+    parts = re.split(',\\s*(?![^()]*\\))', param_str)
     param_dict = {}
     for part in parts:
         if "=" in part:
@@ -31,7 +57,6 @@ def parse_param_string(param_str):
     return param_dict
 
 def get_best_models(all_models, dataset):
-    """Return best accuracy and params for each model in a dataset."""
     best_results = []
     models_dict = all_models[dataset]
 
@@ -40,85 +65,120 @@ def get_best_models(all_models, dataset):
         best_params = None
         for param_key, entry in runs.items():
             cv_report = entry.get("cv_report", {})
-
             acc = 0
-            # Case 1: DataFrame (classification_report output)
             if isinstance(cv_report, pd.DataFrame):
                 if "accuracy" in cv_report.index and "precision" in cv_report.columns:
                     acc = cv_report.loc["accuracy", "precision"]
-            # Case 2: Dict (just in case)
             elif isinstance(cv_report, dict):
                 acc = cv_report.get("accuracy", 0)
-
             if acc > best_acc:
                 best_acc = acc
                 best_params = param_key
-
         best_results.append({
             "Model": model_name,
             "Best Accuracy": round(best_acc, 4),
             "Best Params": best_params
         })
-
     return pd.DataFrame(best_results)
-
 
 # --- Streamlit UI ---
 st.title("🚀 Model Explorer & Predictor")
 
-# Sidebar selection
-st.sidebar.header("Model Selection")
-dataset = st.sidebar.selectbox("Select dataset", list(all_models.keys()))
-model_type = st.sidebar.selectbox("Select model type", list(all_models[dataset].keys()))
+tab1, tab2 = st.tabs(["📊 Model Explorer", "🔮 Prediction Playground"])
 
-param_sets = all_models[dataset][model_type]
+# === TAB 1: Model Explorer ===
+with tab1:
+    st.sidebar.header("Model Selection")
+    dataset = st.sidebar.selectbox("Select dataset", list(all_models.keys()))
+    model_type = st.sidebar.selectbox("Select model type", list(all_models[dataset].keys()))
 
-# Collect all hyperparameter options
-param_options = {}
-for param_str in param_sets.keys():
-    params = parse_param_string(param_str)
-    for k, v in params.items():
-        param_options.setdefault(k, set()).add(v)
+    param_sets = all_models[dataset][model_type]
 
-# Show dropdowns for each hyperparameter
-st.subheader("⚙️ Choose Hyperparameters")
-selected_params = {}
-for k, values in param_options.items():
-    selected_params[k] = st.selectbox(k, sorted(values))
+    # Collect all hyperparameter options
+    param_options = {}
+    for param_str in param_sets.keys():
+        params = parse_param_string(param_str)
+        for k, v in params.items():
+            param_options.setdefault(k, set()).add(v)
 
-# Reconstruct key string from chosen params
-param_key = ", ".join(f"{k}={v}" for k, v in selected_params.items())
+    st.subheader("⚙️ Choose Hyperparameters")
+    selected_params = {}
+    for k, values in param_options.items():
+        selected_params[k] = st.selectbox(k, sorted(values))
 
-# Show CV report if available
-if param_key in param_sets:
-    chosen_model = param_sets[param_key]["model"]
-    cv_report = param_sets[param_key]["cv_report"]
+    # Reconstruct key string
+    param_key = ", ".join(f"{k}={v}" for k, v in selected_params.items())
 
-    st.success("✅ Found trained model for this configuration!")
-    st.write("### CV Report")
-    st.dataframe(pd.DataFrame(cv_report).T)
-else:
-    st.warning("⚠️ This exact hyperparameter combo was not trained.")
+    if param_key in param_sets:
+        chosen_model = param_sets[param_key]["model"]
+        cv_report = param_sets[param_key]["cv_report"]
+        st.success("✅ Found trained model for this configuration!")
+        st.write("### CV Report")
+        st.dataframe(pd.DataFrame(cv_report).T)
+    else:
+        st.warning("⚠️ This exact hyperparameter combo was not trained.")
+        chosen_model = None
 
-# --- Best Models Overview ---
-st.header("📊 Best Models per Dataset")
-
-df_best = get_best_models(all_models, dataset)
-
-# Show table
-st.write("### Best Results Table")
-st.dataframe(df_best)
-
-# Show bar chart
-chart = (
-    alt.Chart(df_best)
-    .mark_bar()
-    .encode(
-        x=alt.X("Model", sort="-y"),
-        y="Best Accuracy",
-        tooltip=["Model", "Best Accuracy", "Best Params"]
+    # Best Models Overview
+    st.header("📊 Best Models per Dataset")
+    df_best = get_best_models(all_models, dataset)
+    st.write("### Best Results Table")
+    st.dataframe(df_best)
+    chart = (
+        alt.Chart(df_best)
+        .mark_bar()
+        .encode(
+            x=alt.X("Model", sort="-y"),
+            y="Best Accuracy",
+            tooltip=["Model", "Best Accuracy", "Best Params"]
+        )
     )
-)
+    st.write("### Best Accuracy Comparison")
+    st.altair_chart(chart, use_container_width=True)
 
-st.write("### Best Accuracy Comparison")
-st.altair_chart(chart, use_container_width=True)
+# === TAB 2: Prediction Playground ===
+with tab2:
+    st.subheader("🔮 Prediction Playground")
+
+    dataset_choice = st.selectbox("Select Dataset for Scaler duringPrediction", list(all_models.keys()))
+
+    st.write("### Example Input Format")
+    if dataset_choice in test_samples and not test_samples[dataset_choice].empty:
+        st.dataframe(test_samples[dataset_choice])
+    else:
+        st.info("No test sample available for this dataset.")
+
+    uploaded_file = st.file_uploader("Upload CSV file with features", type=["csv"])
+
+    if uploaded_file is not None:
+        user_df = pd.read_csv(uploaded_file)
+        st.write("📂 Uploaded Data Preview", user_df)
+
+        # Scale data
+        if dataset_choice in scalers and scalers[dataset_choice] is not None:
+          try:
+            X_scaled = pd.DataFrame(scalers[dataset_choice].transform(user_df),columns=user_df.columns,index=user_df.index)
+          except Exception as e:
+            if isinstance(e, ValueError):
+              st.error("❌ Select the proper dataset above")
+            else:
+              st.error(f"⚠️ Unknown error: {e}")
+            X_scaled = None
+        else:
+          st.warning("⚠️ No scaler found for this dataset, using raw input.")
+          X_scaled = user_df
+
+
+        # Predictions (use model selected in Tab 1 if same dataset)
+        if dataset_choice == dataset and chosen_model is not None:
+          if X_scaled is not None:
+            preds = chosen_model.predict(X_scaled)
+            decoded_preds = [decode_labels.get(p, p) for p in preds]
+
+            st.write("✅ Predictions")
+            results = pd.DataFrame({"Prediction": decoded_preds})
+            st.dataframe(results)
+          else:
+            st.warning("⚠️ No proper data to predict.")
+        else:
+            st.info(f"ℹ️ Please go to **Tab 1** and select a model for the **{dataset_choice.upper()}** dataset before predicting here.")
