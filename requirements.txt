@@ -8,3 +8,7 @@ numpy
 lightgbm
 
 imblearn
+joblib
+altair
+streamlit
+pyngrok
