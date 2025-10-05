@@ -101,6 +101,71 @@ def load_test_summary():
 
 test_summary = load_test_summary()
 
+# === Load Data ===
+@st.cache_resource
+def load_train_test_data():
+    try:
+        train_data = joblib.load("train_data.pkl")
+    except FileNotFoundError:
+        st.error("❌ train_data.pkl not found!")
+        train_data = {}
+
+    try:
+        test_data = joblib.load("test_data.pkl")
+    except FileNotFoundError:
+        st.error("❌ test_data.pkl not found!")
+        test_data = {}
+
+    return train_data, test_data
+
+train_data, test_data = load_train_test_data()
+
+
+import base64
+
+# === Set Streamlit Background ===
+def set_background(image_file):
+    with open(image_file, "rb") as f:
+        encoded = base64.b64encode(f.read()).decode()
+    css = f"""
+    <style>
+    [data-testid="stAppViewContainer"] {{
+        background-image: url("data:image/webp;base64,{encoded}");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }}
+
+    # [data-testid="stSidebar"] {{
+    #     background-color: rgba(10, 10, 10, 0.85);
+    # }}
+
+    # [data-testid="stHeader"] {{
+    #     background: rgba(0, 0, 0, 0.5);
+    # }}
+
+    # h1, h2, h3, h4, h5, h6, p, span, div {{
+    #     color: #ffffff !important;
+    # }}
+
+    # .stButton > button {{
+    #     color: black !important;
+    #     background-color: rgba(255, 255, 255, 0.85);
+    #     border-radius: 10px;
+    #     border: 1px solid #333;
+    # }}
+    # .stButton > button:hover {{
+    #     background-color: rgba(240, 240, 240, 0.9);
+    #     border: 1px solid #000;
+    # }}
+    </style>
+    """
+    st.markdown(css, unsafe_allow_html=True)
+
+# Call the function early in your app
+set_background("background.webp")
+
 
 # --- Streamlit UI ---
 st.title("🚀 Model Explorer & Predictor")
@@ -110,8 +175,8 @@ tab1, tab2, tab3 = st.tabs(["📊 Model Explorer", "🔮 Prediction Playground",
 # === TAB 1: Model Explorer ===
 with tab1:
     st.sidebar.header("Model Selection")
-    dataset = st.sidebar.selectbox("Select dataset", list(all_models.keys()))
-    model_type = st.sidebar.selectbox("Select model type", list(all_models[dataset].keys()))
+    dataset = st.sidebar.selectbox("📀 Select dataset", list(all_models.keys()))
+    model_type = st.sidebar.selectbox("🧠 Select model type", list(all_models[dataset].keys()))
 
     param_sets = all_models[dataset][model_type]
 
@@ -122,14 +187,15 @@ with tab1:
         for k, v in params.items():
             param_options.setdefault(k, set()).add(v)
 
-    st.subheader("⚙️ Choose Hyperparameters")
+    st.sidebar.subheader("⚙️ Choose Hyperparameters")
     selected_params = {}
     for k, values in param_options.items():
-        selected_params[k] = st.selectbox(k, sorted(values))
+        selected_params[k] = st.sidebar.selectbox(k, sorted(values))
 
     # Reconstruct key string
     param_key = ", ".join(f"{k}={v}" for k, v in selected_params.items())
 
+    st.subheader(f"📊 {model_type} Model Overview ({dataset} Dataset)")
     if param_key in param_sets:
         chosen_model = param_sets[param_key]["model"]
         cv_report = param_sets[param_key]["cv_report"]
@@ -200,11 +266,45 @@ with tab2:
     else:
         st.info("No test sample available for this dataset.")
 
-    uploaded_file = st.file_uploader("Upload CSV file with features", type=["csv"])
+    # === Step 1: Choose Input Source ===
+    st.markdown("### 🧩 Step 1 – Choose Input Data Source")
+    data_option = st.radio(
+        "Would you like to upload your own data or use a provided test dataset?",
+        ("Upload my own CSV", "Use default NASA test dataset"),
+        key=f"data_option_{dataset_choice}"
+    )
 
-    if uploaded_file is not None:
-        user_df = pd.read_csv(uploaded_file)
-        st.write("📂 Uploaded Data Preview", user_df)
+    user_df = None
+
+    # === If user uploads their own CSV ===
+    if data_option == "Upload my own CSV":
+        uploaded_file = st.file_uploader("📤 Upload CSV file with features", type=["csv"])
+        if uploaded_file is not None:
+            try:
+                user_df = pd.read_csv(uploaded_file)
+                st.write("📂 Uploaded Data Preview")
+                st.dataframe(user_df.head())
+            except Exception as e:
+                st.error(f"❌ Error reading CSV file: {e}")
+
+    # === If user chooses default dataset ===
+    elif data_option == "Use default NASA test dataset":
+        if dataset_choice in test_data:
+            X_test_default, y_test_default = test_data[dataset_choice]
+
+            # ✅ Use only top 10 rows for quick prediction demo
+            X_test_default = X_test_default.head(50)
+            if y_test_default is not None and hasattr(y_test_default, "head"):
+                y_test_default = y_test_default.head(50)
+
+            st.success(f"✅ Loaded default test dataset for {dataset_choice} (showing top 10 rows)")
+            st.dataframe(X_test_default)
+            user_df = X_test_default
+        else:
+            st.warning(f"⚠️ No default test dataset found for {dataset_choice}")
+
+
+    if user_df is not None:
 
         # Scale data
         if dataset_choice in scalers and scalers[dataset_choice] is not None:
@@ -233,32 +333,13 @@ with tab2:
           else:
             st.warning("⚠️ No proper data to predict.")
         else:
-            st.info(f"ℹ️ Please go to **Tab 1** and select a model for the **{dataset_choice.upper()}** dataset before predicting here.")
+            st.info(f"ℹ️ Please go to **Side panel** and select a model for the **{dataset_choice.upper()}** dataset before predicting here.")
 
 # === TAB 3: Train Your Own Model (Progressive Flow with conditional rendering) ===
 
 with tab3:
     st.subheader("🧠 Train Your Own Model")
     st.markdown("Follow each step sequentially to configure and train your own exoplanet classifier.")
-
-    # === Load Data ===
-    @st.cache_resource
-    def load_train_test_data():
-        try:
-            train_data = joblib.load("train_data.pkl")
-        except FileNotFoundError:
-            st.error("❌ train_data.pkl not found!")
-            train_data = {}
-
-        try:
-            test_data = joblib.load("test_data.pkl")
-        except FileNotFoundError:
-            st.error("❌ test_data.pkl not found!")
-            test_data = {}
-
-        return train_data, test_data
-
-    train_data, test_data = load_train_test_data()
 
     # === Model Base Constructors ===
     models = {
