@@ -12,6 +12,12 @@ from sklearn.metrics import classification_report, accuracy_score
 import time
 
 
+st.set_page_config(
+    page_title="ExoAI: Interactive Machine Learning for Exoplanet Discovery",
+    page_icon="🚀",
+    layout="wide"
+)
+
 data_dict = {'TESS':'toi', 'K2':'k2', 'Keplar':'keplar'}
 # === Load Models ===
 @st.cache_resource
@@ -185,11 +191,36 @@ st.markdown("""
         color: #e0e0e0 !important;
         font-weight: 500;
     }
+    /* ====== Custom Dark Selectbox Styling ====== */
+    div[data-baseweb="select"] > div {
+        background-color: #262627 !important;
+        border: 1px solid rgba(0, 170, 255, 0.3) !important;
+        border-radius: 8px !important;
+        color: #e0e0e0 !important;
+        transition: 0.3s ease;
+    }
+    div[data-baseweb="select"]:hover > div {
+        box-shadow: 0 0 10px rgba(0, 170, 255, 0.4) !important;
+    }
+    div[data-baseweb="select"] span {
+        color: #e0e0e0 !important;
+    }
+    div[data-baseweb="select"] svg {
+        fill: #00aaff !important;
+    }
+    /* Dropdown menu background */
+    ul[role="listbox"] {
+        background-color: #262627 !important;
+        border: 1px solid rgba(0, 170, 255, 0.3) !important;
+    }
+    ul[role="listbox"] li:hover {
+        background-color: rgba(0, 170, 255, 0.2) !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
 # --- Streamlit UI ---
-st.title("🚀 Model Explorer & Predictor")
+st.title("🪐 ExoAI: Intelligent Exploration of New Worlds")
 
 tab1, tab2, tab3 = st.tabs(["📊 Model Explorer", "🔮 Prediction Playground", "🧠 Build Your Own Model"])
 
