@@ -304,7 +304,7 @@ with tab2:
             try:
                 user_df = pd.read_csv(uploaded_file)
                 st.write("📂 Uploaded Data Preview")
-                st.dataframe(user_df.head())
+                st.dataframe(user_df)
             except Exception as e:
                 st.error(f"❌ Error reading CSV file: {e}")
 
