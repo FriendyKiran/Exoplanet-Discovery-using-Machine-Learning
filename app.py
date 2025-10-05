@@ -164,13 +164,34 @@ def set_background(image_file):
     st.markdown(css, unsafe_allow_html=True)
 
 # Call the function early in your app
-set_background("background.webp")
+set_background("background.jpg")
 
+st.markdown("""
+    <style>
+    /* === Custom Dark Radio Section Styling === */
+    div[data-testid="stRadio"] {
+        background: rgba(20, 20, 30, 0.85);
+        padding: 1.2em 1.5em;
+        border-radius: 12px;
+        border: 1px solid rgba(0, 170, 255, 0.3);
+        box-shadow: 0 0 12px rgba(0, 170, 255, 0.2);
+        color: #e0e0e0;
+        transition: 0.3s ease;
+    }
+    div[data-testid="stRadio"]:hover {
+        box-shadow: 0 0 20px rgba(0, 170, 255, 0.4);
+    }
+    div[data-testid="stRadio"] label {
+        color: #e0e0e0 !important;
+        font-weight: 500;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # --- Streamlit UI ---
 st.title("🚀 Model Explorer & Predictor")
 
-tab1, tab2, tab3 = st.tabs(["📊 Model Explorer", "🔮 Prediction Playground", "🧠 Train Your Own Model"])
+tab1, tab2, tab3 = st.tabs(["📊 Model Explorer", "🔮 Prediction Playground", "🧠 Build Your Own Model"])
 
 # === TAB 1: Model Explorer ===
 with tab1:
