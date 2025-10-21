@@ -421,6 +421,74 @@ with tab2:
                 st.markdown("### 📊 Class-wise Probability Distribution")
                 st.dataframe(prob_table)
 
+            # If there are MANY samples, show a summary table + an inspector for any row
+            else:
+                st.markdown("## 🎨 Batch Predictions")
+                summary = pd.DataFrame({
+                    "Sample": range(len(df_proba)),
+                    "Predicted Class": top_class,
+                    "Confidence (%)": top_conf
+                })
+                st.dataframe(summary)
+
+                st.markdown(
+                    """
+                    <div style='
+                        margin-top: 10px;
+                        background: linear-gradient(135deg, #FBD786 0%, #f7797d 100%);
+                        padding: 14px; 
+                        border-radius: 12px;
+                        color: #222;
+                        text-align: center;
+                        box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+                        font-weight: 600;
+                    '>
+                        🔎 Select a sample below to view its full probability distribution
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+                idx = st.number_input(
+                    "Sample index to inspect",
+                    min_value=0,
+                    max_value=len(df_proba) - 1,
+                    value=0,
+                    step=1
+                )
+
+                # Pretty card for the chosen sample
+                pred = top_class[idx]
+                conf = float(top_conf.iloc[idx])
+                st.markdown(
+                    f"""
+                    <div style='
+                        margin-top: 10px;
+                        background: linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%);
+                        padding: 18px; 
+                        border-radius: 14px;
+                        text-align: center;
+                        color: white;
+                        font-size: 18px;
+                        font-weight: bold;
+                        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+                    '>
+                        🧠 Predicted Class: <span style='font-size:24px;'>{pred}</span>
+                        &nbsp;•&nbsp; 🎯 Confidence: <span style='font-size:20px;'>{conf:.2f}%</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+                # Full distribution for the selected sample (sorted)
+                row = df_proba.iloc[int(idx)].sort_values(ascending=False)
+                prob_table = row.to_frame("Probability")
+                prob_table["Probability (%)"] = (prob_table["Probability"] * 100).round(2)
+
+                st.markdown("### 📊 Class-wise Probability Distribution")
+                st.dataframe(prob_table)
+
+
           else:
             st.warning("⚠️ No proper data to predict.")
         else:
