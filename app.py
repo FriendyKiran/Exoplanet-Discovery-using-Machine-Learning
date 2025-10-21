@@ -376,12 +376,51 @@ with tab2:
         # Predictions (use model selected in Tab 1 if same dataset)
         if dataset_choice == dataset and chosen_model is not None:
           if X_scaled is not None:
-            preds = chosen_model.predict(X_scaled)
-            decoded_preds = [decode_labels.get(p, p) for p in preds]
+            # --- Probabilities ---
+            proba = chosen_model.predict_proba(X_scaled)
+            class_labels = [decode_labels.get(i, i) for i in chosen_model.classes_]
 
-            st.write("✅ Predictions")
-            results = pd.DataFrame({"Prediction": decoded_preds})
-            st.dataframe(results)
+            # Put probabilities in a tidy DataFrame: one row per sample, one column per class
+            df_proba = pd.DataFrame(proba, columns=class_labels)
+
+            # --- Top prediction per sample ---
+            top_idx = df_proba.values.argmax(axis=1)
+            top_class = [class_labels[i] for i in top_idx]
+            top_conf = (df_proba.max(axis=1) * 100).round(2)
+
+            # If there's only ONE sample, show the big "art card" + its full distribution
+            if len(df_proba) == 1:
+                pred = top_class[0]
+                conf = float(top_conf.iloc[0])
+
+                st.markdown("## 🎨 Model Prediction")
+                st.markdown(
+                    f"""
+                    <div style='
+                        background: linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%);
+                        padding: 20px; 
+                        border-radius: 15px;
+                        text-align: center;
+                        color: white;
+                        font-size: 22px;
+                        font-weight: bold;
+                        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+                    '>
+                        🧠 Predicted Class: <span style='font-size:28px;'>{pred}</span><br>
+                        🎯 Confidence: <span style='font-size:24px;'>{conf:.2f}%</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+                # Full distribution for the single sample (sorted)
+                row = df_proba.iloc[0].sort_values(ascending=False)
+                prob_table = row.to_frame("Probability")
+                prob_table["Probability (%)"] = (prob_table["Probability"] * 100).round(2)
+
+                st.markdown("### 📊 Class-wise Probability Distribution")
+                st.dataframe(prob_table)
+
           else:
             st.warning("⚠️ No proper data to predict.")
         else:
